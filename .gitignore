@@ -60,3 +60,16 @@ create-*.js
 
 # Build files
 *.tsbuildinfo
+
+# Uploaded files (keep folder structure but ignore uploaded files)
+uploads/*
+!uploads/.gitkeep
+!uploads/images/
+!uploads/documents/
+!uploads/files/
+uploads/images/*
+uploads/documents/*
+uploads/files/*
+!uploads/images/.gitkeep
+!uploads/documents/.gitkeep
+!uploads/files/.gitkeep

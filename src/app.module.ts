@@ -21,9 +21,11 @@ import { CurriculumModule } from './modules/curriculum/curriculum.module';
 import { GradeLevelsModule } from './modules/grade-levels/grade-levels.module';
 import { SectionsModule } from './modules/sections/sections.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 @Module({
   imports: [
@@ -36,8 +38,8 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     // Rate limiting (protección DDoS)
     ThrottlerModule.forRoot([
       {
-        ttl: 60000, // 1 minuto
-        limit: 100, // 100 requests por minuto
+        ttl: parseInt(process.env.THROTTLE_TTL || '60000', 10), // 1 minuto
+        limit: parseInt(process.env.THROTTLE_LIMIT || '60', 10), // 60 requests por minuto
       },
     ]),
 
@@ -64,6 +66,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     GradeLevelsModule,
     SectionsModule,
     SubjectsModule,
+    UploadsModule,
   ],
   providers: [
     // Rate limiting global
@@ -84,6 +87,10 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })
