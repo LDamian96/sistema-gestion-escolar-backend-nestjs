@@ -22,6 +22,9 @@ import { GradeLevelsModule } from './modules/grade-levels/grade-levels.module';
 import { SectionsModule } from './modules/sections/sections.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -67,6 +70,9 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     SectionsModule,
     SubjectsModule,
     UploadsModule,
+    AuditModule,
+    NotificationsModule,
+    ReportsModule,
   ],
   providers: [
     // Rate limiting global

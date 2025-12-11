@@ -4,28 +4,12 @@ import {
   ExecutionContext,
   CallHandler,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-
-interface AuditLog {
-  timestamp: Date;
-  userId: string;
-  userEmail: string;
-  userRole: string;
-  schoolId: string;
-  action: string;
-  resource: string;
-  resourceId?: string;
-  method: string;
-  path: string;
-  ip: string;
-  userAgent: string;
-  statusCode?: number;
-  duration: number;
-  success: boolean;
-  errorMessage?: string;
-}
+import { AuditService } from '../../modules/audit/audit.service';
+import { AuditAction } from '../../../generated/prisma';
 
 // Rutas que requieren auditoría (operaciones sensibles)
 const AUDITED_ROUTES = [
@@ -52,9 +36,13 @@ const AUDITED_ROUTES = [
 export class AuditInterceptor implements NestInterceptor {
   private readonly logger = new Logger('AUDIT');
 
+  constructor(
+    @Inject(AuditService) private readonly auditService: AuditService,
+  ) {}
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
-    const { method, url, body, user, ip, headers } = request;
+    const { method, url, user, ip, headers } = request;
     const now = Date.now();
 
     // Verificar si la ruta requiere auditoría
@@ -64,22 +52,28 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     // Extraer información del usuario
-    const userId = user?.sub || 'anonymous';
-    const userEmail = user?.email || 'unknown';
+    const userId = user?.sub || null;
+    const userEmail = user?.email || 'anonymous';
     const userRole = user?.role || 'unknown';
-    const schoolId = user?.schoolId || 'unknown';
+    const schoolId = user?.schoolId || null;
 
     // Extraer resource ID de la URL si existe
     const resourceId = this.extractResourceId(url);
     const resource = this.extractResource(url);
-    const action = this.getAction(method);
+    const action = this.getAction(method, url);
 
     return next.handle().pipe(
       tap({
         next: () => {
           const duration = Date.now() - now;
-          const auditLog: AuditLog = {
-            timestamp: new Date(),
+
+          // Log a consola
+          this.logger.log(
+            `[${action}] ${resource}${resourceId ? `/${resourceId}` : ''} by ${userEmail} (${userRole}) - SUCCESS - ${duration}ms`
+          );
+
+          // Guardar en base de datos
+          this.auditService.create({
             userId,
             userEmail,
             userRole,
@@ -89,19 +83,23 @@ export class AuditInterceptor implements NestInterceptor {
             resourceId,
             method,
             path: url,
-            ip: ip || headers['x-forwarded-for'] || 'unknown',
-            userAgent: headers['user-agent'] || 'unknown',
+            ip: ip || headers['x-forwarded-for'] || null,
+            userAgent: headers['user-agent'] || null,
             statusCode: 200,
             duration,
             success: true,
-          };
-
-          this.logAudit(auditLog);
+          });
         },
         error: (error) => {
           const duration = Date.now() - now;
-          const auditLog: AuditLog = {
-            timestamp: new Date(),
+
+          // Log a consola
+          this.logger.warn(
+            `[${action}] ${resource}${resourceId ? `/${resourceId}` : ''} by ${userEmail} (${userRole}) - FAILED - ${duration}ms - ${error.message}`
+          );
+
+          // Guardar en base de datos
+          this.auditService.create({
             userId,
             userEmail,
             userRole,
@@ -111,15 +109,13 @@ export class AuditInterceptor implements NestInterceptor {
             resourceId,
             method,
             path: url,
-            ip: ip || headers['x-forwarded-for'] || 'unknown',
-            userAgent: headers['user-agent'] || 'unknown',
+            ip: ip || headers['x-forwarded-for'] || null,
+            userAgent: headers['user-agent'] || null,
             statusCode: error.status || 500,
             duration,
             success: false,
             errorMessage: error.message,
-          };
-
-          this.logAudit(auditLog);
+          });
         },
       }),
     );
@@ -145,30 +141,22 @@ export class AuditInterceptor implements NestInterceptor {
     return match ? match[1] : 'unknown';
   }
 
-  private getAction(method: string): string {
+  private getAction(method: string, url: string): AuditAction {
+    // Caso especial para login
+    if (url.includes('/auth/login')) {
+      return AuditAction.LOGIN;
+    }
+
     switch (method) {
       case 'POST':
-        return 'CREATE';
+        return AuditAction.CREATE;
       case 'PATCH':
       case 'PUT':
-        return 'UPDATE';
+        return AuditAction.UPDATE;
       case 'DELETE':
-        return 'DELETE';
+        return AuditAction.DELETE;
       default:
-        return method;
+        return AuditAction.CREATE;
     }
-  }
-
-  private logAudit(auditLog: AuditLog): void {
-    const logMessage = `[${auditLog.action}] ${auditLog.resource}${auditLog.resourceId ? `/${auditLog.resourceId}` : ''} by ${auditLog.userEmail} (${auditLog.userRole}) - ${auditLog.success ? 'SUCCESS' : 'FAILED'} - ${auditLog.duration}ms`;
-
-    if (auditLog.success) {
-      this.logger.log(logMessage);
-    } else {
-      this.logger.warn(`${logMessage} - Error: ${auditLog.errorMessage}`);
-    }
-
-    // En producción, aquí se podría guardar en BD o enviar a un servicio de logs
-    // await this.prisma.auditLog.create({ data: auditLog });
   }
 }
